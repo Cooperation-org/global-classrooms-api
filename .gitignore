@@ -1,0 +1,275 @@
+# Django .gitignore for Global Classrooms Backend
+
+
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+
+# Django Logs (CRITICAL!)
+logs/
+*.log
+django.log
+
+# Python Cache (CRITICAL!)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+
+*.env
+.env
+.env.local
+.env.production
+.env.staging
+.env.development
+env/
+ENV/
+
+# Django Settings - if you have local settings
+local_settings.py
+settings_local.py
+*_local.py
+
+# Database Files
+*.sqlite3
+*.db
+db.sqlite3
+
+# Django Static & Media Files
+staticfiles/
+static_root/
+media/
+media_root/
+uploads/
+
+# Django Cache
+**/migrations/__pycache__/
+**/migrations/*.pyc
+
+# Python Cache Files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+globalclassrooms_env/
+django_env/
+
+# IDE Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Django Logs
+*.log
+logs/
+log/
+
+# Django Collected Static Files
+/static/
+/staticfiles/
+
+# Django Media Files (user uploads)
+/media/
+
+# Django Translation Files (if using i18n)
+*.mo
+*.pot
+
+# Node.js (if you have any frontend build tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Backup Files
+*.bak
+*.backup
+*.sql
+
+# Documentation builds
+docs/_build/
+
+# PyBuilder
+target/
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Spyder
+.spyderproject
+.spyproject
+
+# Rope
+.ropeproject
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# API Keys and Secrets (in case you have separate files)
+secrets.json
+keys.json
+credentials.json
+
+# SSL Certificates
+*.crt
+*.key
+*.pem
+
+# Redis dump
+dump.rdb
+
+# Local development databases
+*.sqlite
+*.sqlite3
+
+# Django Debug Toolbar
+debug_toolbar/
+
+# Django Extensions
+django_extensions/
+
+# Mailhog (if using for email testing)
+mailhog
+
+# Elasticsearch
+elasticsearch/
+
+# If using Docker
+docker-compose.override.yml
+.dockerignore
+
+# If using GitHub Actions or CI/CD
+.github/workflows/secrets.yml
+
+# Package managers
+poetry.lock
+Pipfile.lock
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+*.exe
+*.msi
+
+# Temporary Django files
+*.tmp
+*.temp
+
+# Custom Global Classrooms specific files
+# (add any project-specific files here)
+school_logos/
+certificate_templates/
+impact_photos/
+backup_files/
+
+# Environment-specific files
+.env.development
+.env.production
+.env.staging
+.env.testing
+
+# Django fixture data (optional - remove if you want to commit fixtures)
+# fixtures/
+# *.json
+
+# Gunicorn
+gunicorn.pid
+
+# Whitenoise static files
+staticfiles/
+
+# Django Compressor
+CACHE/
+
+# Django Debug
+.debug/
+
+# Local configuration
+local/
