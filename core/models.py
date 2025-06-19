@@ -3,6 +3,8 @@ from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 import uuid
+from django.core.mail import send_mail
+import random
 
 class User(AbstractUser):
     """Extended User model for Global Classrooms"""
@@ -36,6 +38,18 @@ class User(AbstractUser):
     date_joined_school = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Wallet/account fields
+    wallet_address = models.CharField(max_length=255, blank=True, null=True)
+    google_account_id = models.CharField(max_length=255, blank=True, null=True)
+    signup_method = models.CharField(
+        max_length=50,
+        choices=[
+            ('wallet', 'Wallet'),
+            ('custodial', 'Custodial Wallet'),
+            ('google', 'Google'),
+        ],
+        default='wallet'
+    )
 
        # Fix the reverse accessor conflicts
     groups = models.ManyToManyField(
@@ -58,6 +72,16 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.role})"
+
+
+class EmailLoginOTP(models.Model):
+    email = models.EmailField()
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_used = models.BooleanField(default=False)
+
+    def is_expired(self):
+        return (timezone.now() - self.created_at).total_seconds() > 600  # 10 minutes
 
 
 class School(models.Model):

@@ -9,6 +9,8 @@ from django.db.models import Count, Sum, Q
 from django.utils import timezone
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
+from django.core.mail import send_mail
+import random
 
 from rest_framework import viewsets, status, permissions, filters
 from rest_framework.decorators import action, api_view, permission_classes
@@ -25,7 +27,7 @@ from drf_spectacular.types import OpenApiTypes
 from .models import (
     User, School, Subject, Class, TeacherProfile, StudentProfile,
     Project, ProjectParticipation, EnvironmentalImpact, Donation,
-    Certificate, SchoolMembership
+    Certificate, SchoolMembership, EmailLoginOTP
 )
 from .serializers import (
     UserRegistrationSerializer, UserSerializer, UserUpdateSerializer,
@@ -39,15 +41,15 @@ from .serializers import (
 )
 from .permissions import IsOwnerOrReadOnly, IsSchoolAdminOrReadOnly, IsTeacherOrReadOnly
 from .filters import ProjectFilter, SchoolFilter, EnvironmentalImpactFilter
+from rest_framework.permissions import AllowAny
 
 
 # =============================================================================
-# AUTHENTICATION VIEWS
+# AUTHENTICATION & LOGIN VIEWS (Grouped at the top for clarity)
 # =============================================================================
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """Custom JWT token view that returns user data with tokens"""
-    
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
         if response.status_code == 200:
@@ -57,21 +59,16 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             response.data['user'] = user_data
         return response
 
-
 class UserRegistrationView(CreateAPIView):
     """User registration endpoint"""
     queryset = User.objects.all()
     serializer_class = UserRegistrationSerializer
     permission_classes = [permissions.AllowAny]
-    
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        
-        # Generate tokens for the new user
         refresh = RefreshToken.for_user(user)
-        
         return Response({
             'user': UserSerializer(user).data,
             'tokens': {
@@ -80,25 +77,105 @@ class UserRegistrationView(CreateAPIView):
             }
         }, status=status.HTTP_201_CREATED)
 
+class WalletLoginView(APIView):
+    """Login using wallet address"""
+    permission_classes = [permissions.AllowAny]
+    def post(self, request):
+        wallet_address = request.data.get('wallet_address')
+        if not wallet_address:
+            return Response({'error': 'wallet_address is required'}, status=400)
+        try:
+            user = User.objects.get(wallet_address=wallet_address)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=404)
+        if not user.is_active:
+            return Response({'error': 'User is inactive'}, status=403)
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'user': UserSerializer(user).data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        })
+
+class GoogleLoginView(APIView):
+    """Login using Google account ID"""
+    permission_classes = [permissions.AllowAny]
+    def post(self, request):
+        google_account_id = request.data.get('google_account_id')
+        if not google_account_id:
+            return Response({'error': 'google_account_id is required'}, status=400)
+        try:
+            user = User.objects.get(google_account_id=google_account_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=404)
+        if not user.is_active:
+            return Response({'error': 'User is inactive'}, status=403)
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'user': UserSerializer(user).data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        })
+
+class EmailLoginRequestView(APIView):
+    permission_classes = [permissions.AllowAny]
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({'error': 'Email is required'}, status=400)
+        code = str(random.randint(100000, 999999))
+        EmailLoginOTP.objects.create(email=email, code=code)
+        send_mail(
+            'Your Global Classrooms Login Code',
+            f'Your login code is: {code}',
+            'no-reply@globalclassrooms.org',
+            [email],
+        )
+        return Response({'message': 'A login code has been sent to your email.'})
+
+class EmailLoginVerifyView(APIView):
+    permission_classes = [permissions.AllowAny]
+    def post(self, request):
+        email = request.data.get('email')
+        code = request.data.get('code')
+        if not email or not code:
+            return Response({'error': 'Email and code are required.'}, status=400)
+        try:
+            otp = EmailLoginOTP.objects.filter(email=email, code=code, is_used=False).latest('created_at')
+        except EmailLoginOTP.DoesNotExist:
+            return Response({'error': 'Invalid code.'}, status=400)
+        if otp.is_expired():
+            return Response({'error': 'Code expired.'}, status=400)
+        otp.is_used = True
+        otp.save()
+        user, created = User.objects.get_or_create(email=email, defaults={'username': email.split('@')[0]})
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'user': UserSerializer(user).data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        })
 
 class UserProfileView(RetrieveUpdateAPIView):
     """User profile view for getting and updating profile"""
     serializer_class = UserUpdateSerializer
     permission_classes = [permissions.IsAuthenticated]
-    
     def get_object(self):
         return self.request.user
-    
     def get_serializer_class(self):
         if self.request.method == 'GET':
             return UserSerializer
         return UserUpdateSerializer
 
-
 class PasswordChangeView(APIView):
     """Change user password"""
     permission_classes = [permissions.IsAuthenticated]
-    
     def post(self, request):
         serializer = PasswordChangeSerializer(
             data=request.data, 
@@ -110,6 +187,34 @@ class PasswordChangeView(APIView):
             user.save()
             return Response({'message': 'Password changed successfully'})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class EmailLoginView(APIView):
+    permission_classes = [AllowAny]
+    def post(self, request):
+        email = request.data.get('email')
+        password = request.data.get('password')
+        if not email or not password:
+            return Response({'error': 'Email and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'error': 'No user with this email.'}, status=status.HTTP_401_UNAUTHORIZED)
+        if not user.check_password(password):
+            return Response({'error': 'Invalid password.'}, status=status.HTTP_401_UNAUTHORIZED)
+        if not user.is_active:
+            return Response({'error': 'User is inactive.'}, status=status.HTTP_403_FORBIDDEN)
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'user': {
+                'id': str(user.id),
+                'username': user.username,
+                'email': user.email,
+            },
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        }, status=status.HTTP_200_OK)
 
 
 # =============================================================================

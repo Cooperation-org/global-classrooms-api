@@ -38,6 +38,11 @@ urlpatterns = [
     path('auth/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
     path('auth/verify/', TokenVerifyView.as_view(), name='token-verify'),
     path('auth/logout/', TokenBlacklistView.as_view(), name='token-blacklist'),
+    path('auth/login/wallet/', views.WalletLoginView.as_view(), name='wallet-login'),
+    path('auth/login/google/', views.GoogleLoginView.as_view(), name='google-login'),
+    path('auth/login/email/', views.EmailLoginRequestView.as_view(), name='email-login-request'),
+    path('auth/login/email/verify/', views.EmailLoginVerifyView.as_view(), name='email-login-verify'),
+    path('auth/login/email-password/', views.EmailLoginView.as_view(), name='email-password-login'),
     
     # Profile management
     path('auth/profile/', views.UserProfileView.as_view(), name='user-profile'),

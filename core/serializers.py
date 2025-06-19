@@ -22,13 +22,16 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     """Serializer for user registration"""
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True)
+    wallet_address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    google_account_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    signup_method = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     
     class Meta:
         model = User
         fields = [
             'username', 'email', 'password', 'password_confirm', 'first_name', 
             'last_name', 'role', 'mobile_number', 'gender', 'date_of_birth',
-            'city', 'country'
+            'city', 'country', 'wallet_address', 'google_account_id', 'signup_method'
         ]
     
     def validate(self, attrs):
