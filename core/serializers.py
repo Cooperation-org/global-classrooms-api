@@ -29,7 +29,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'username', 'email', 'password', 'password_confirm', 'first_name', 
+            'email', 'password', 'password_confirm', 'first_name', 
             'last_name', 'role', 'mobile_number', 'gender', 'date_of_birth',
             'city', 'country', 'wallet_address', 'google_account_id', 'signup_method'
         ]
@@ -42,6 +42,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('password_confirm')
         password = validated_data.pop('password')
+        validated_data['username'] = validated_data['email']
         user = User.objects.create_user(**validated_data)
         user.set_password(password)
         user.save()

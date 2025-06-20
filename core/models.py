@@ -13,6 +13,7 @@ class User(AbstractUser):
         ('teacher', 'Teacher'),
         ('school_admin', 'School Admin'),
         ('super_admin', 'Super Admin'),
+        ('donor', 'Donor'),
     ]
     
     GENDER_CHOICES = [
@@ -23,6 +24,7 @@ class User(AbstractUser):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(unique=True)
     role = models.CharField(max_length=20, choices=USER_ROLES, default='student')
     mobile_number = models.CharField(max_length=20, blank=True, null=True)
     gender = models.CharField(max_length=20, choices=GENDER_CHOICES, blank=True, null=True)
@@ -51,7 +53,11 @@ class User(AbstractUser):
         default='wallet'
     )
 
-       # Fix the reverse accessor conflicts
+    # Use email for authentication instead of username
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username']  # username is still required for superuser creation, etc.
+
+    # Fix the reverse accessor conflicts
     groups = models.ManyToManyField(
         'auth.Group',
         verbose_name='groups',
@@ -68,7 +74,6 @@ class User(AbstractUser):
         related_name='core_users',  # Changed from default 'user_set'
         related_query_name='core_user',
     )
-
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.role})"
