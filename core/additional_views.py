@@ -24,7 +24,7 @@ from .models import (
     Certificate, SchoolMembership, ProjectParticipation
 )
 from .serializers import (
-    UserSerializer, SchoolSerializer, ProjectSerializer,
+    UserSerializer, SchoolSerializer, SchoolMembershipSerializer, ProjectSerializer,
     EnvironmentalImpactSerializer, DonationSerializer, CertificateSerializer
 )
 from .filters import ProjectFilter, SchoolFilter, UserFilter
