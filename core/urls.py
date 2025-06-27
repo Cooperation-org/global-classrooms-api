@@ -10,6 +10,7 @@ from rest_framework_simplejwt.views import (
     TokenVerifyView,
     TokenBlacklistView
 )
+from rest_framework_nested import routers
 
 from . import views
 
@@ -28,6 +29,12 @@ router.register(r'environmental-impacts', views.EnvironmentalImpactViewSet, base
 router.register(r'donations', views.DonationViewSet, basename='donation')
 router.register(r'certificates', views.CertificateViewSet, basename='certificate')
 
+# Create nested routers for project-specific endpoints
+projects_router = routers.NestedSimpleRouter(router, r'projects', lookup='project')
+projects_router.register(r'goals', views.ProjectGoalViewSet, basename='project-goals')
+projects_router.register(r'files', views.ProjectFileViewSet, basename='project-files')
+projects_router.register(r'updates', views.ProjectUpdateViewSet, basename='project-updates')
+
 # Define URL patterns
 urlpatterns = [
     # =================================================================
@@ -42,7 +49,6 @@ urlpatterns = [
     path('auth/login/google/', views.GoogleLoginView.as_view(), name='google-login'),
     path('auth/login/email/', views.EmailLoginRequestView.as_view(), name='email-login-request'),
     path('auth/login/email/verify/', views.EmailLoginVerifyView.as_view(), name='email-login-verify'),
-    path('auth/login/email-password/', views.EmailLoginView.as_view(), name='email-password-login'),
     
     # Profile management
     path('auth/profile/', views.UserProfileView.as_view(), name='user-profile'),
@@ -58,6 +64,7 @@ urlpatterns = [
     # VIEWSET ROUTES (CRUD OPERATIONS)
     # =================================================================
     path('', include(router.urls)),
+    path('', include(projects_router.urls)),
     
     # =================================================================
     # CUSTOM PROJECT ENDPOINTS

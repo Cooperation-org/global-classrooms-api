@@ -276,8 +276,7 @@ class Project(models.Model):
     end_date = models.DateField()
     is_open_for_collaboration = models.BooleanField(default=True)
     
-    # Goals and Rewards
-    goals = models.JSONField(default=list)  # List of project goals
+    # Goals and Rewards will now be handled by the ProjectGoal model
     offer_rewards = models.BooleanField(default=False)
     recognition_type = models.CharField(max_length=100, blank=True, null=True)
     award_criteria = models.TextField(blank=True, null=True)
@@ -297,9 +296,8 @@ class Project(models.Model):
     contact_country = models.CharField(max_length=100)
     contact_city = models.CharField(max_length=100)
     
-    # Media and Attachments
-    supporting_files = models.JSONField(default=list)  # File paths for supporting documents
-    media_files = models.JSONField(default=list)  # Image and video paths
+    # Media and Attachments - supporting_files will be handled by ProjectFile model
+    media_files = models.JSONField(default=list)  # For other general media links
     
     # Project Status
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
@@ -309,6 +307,35 @@ class Project(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.lead_school.name}"
+
+
+class ProjectGoal(models.Model):
+    """
+    Represents a single goal or target for a project, replacing the old JSONField.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='project_goals')
+    description = models.CharField(max_length=255)
+    is_completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Goal for {self.project.title}: {self.description}"
+
+
+class ProjectFile(models.Model):
+    """
+    Stores a supporting document or file linked to a Project.
+    Used for initial project resources, not ongoing updates.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='project_files')
+    file = models.FileField(upload_to='project_files/')
+    description = models.CharField(max_length=255, blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"File for {self.project.title}: {self.file.name}"
 
 
 class ProjectParticipation(models.Model):
@@ -324,6 +351,44 @@ class ProjectParticipation(models.Model):
 
     def __str__(self):
         return f"{self.school.name} in {self.project.title}"
+
+
+class ProjectUpdate(models.Model):
+    """
+    Represents an update, submission, or media contribution to a project
+    from a specific school. Contains the description and groups media files.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='updates')
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='project_updates')
+    uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='project_updates')
+    
+    description = models.TextField(blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Update for {self.project.title} from {self.school.name} at {self.created_at}"
+
+
+class ProjectUpdateMedia(models.Model):
+    """
+    Stores a single media file (image, video, or document) linked to a ProjectUpdate.
+    """
+    MEDIA_TYPE_CHOICES = [
+        ('image', 'Image'),
+        ('video', 'Video'),
+        ('file', 'File'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    update = models.ForeignKey(ProjectUpdate, on_delete=models.CASCADE, related_name='media')
+    file = models.FileField(upload_to='project_updates/media/')
+    media_type = models.CharField(max_length=20, choices=MEDIA_TYPE_CHOICES)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.media_type} for update {self.update.id}"
 
 
 class EnvironmentalImpact(models.Model):

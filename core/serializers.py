@@ -10,7 +10,7 @@ from django.core.exceptions import ValidationError
 from .models import (
     User, School, Subject, Class, TeacherProfile, StudentProfile,
     Project, ProjectParticipation, EnvironmentalImpact, Donation,
-    Certificate, SchoolMembership
+    Certificate, SchoolMembership, ProjectGoal, ProjectFile, ProjectUpdate, ProjectUpdateMedia
 )
 
 
@@ -230,11 +230,11 @@ class ProjectSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'short_description', 'detailed_description',
             'cover_image', 'environmental_themes', 'start_date', 'end_date',
-            'is_open_for_collaboration', 'goals', 'offer_rewards',
+            'is_open_for_collaboration', 'offer_rewards',
             'recognition_type', 'award_criteria', 'lead_school',
             'lead_school_name', 'contact_person_name', 'contact_person_email',
             'contact_person_role', 'contact_country', 'contact_city',
-            'supporting_files', 'media_files', 'status', 'created_by',
+            'media_files', 'status', 'created_by',
             'created_by_name', 'created_at', 'updated_at',
             'participating_schools_count', 'total_impact'
         ]
@@ -254,20 +254,86 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 class ProjectCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating projects"""
+    goals = serializers.ListField(
+        child=serializers.CharField(max_length=255),
+        write_only=True,
+        required=False
+    )
     
     class Meta:
         model = Project
         fields = [
             'title', 'short_description', 'detailed_description', 'cover_image',
             'environmental_themes', 'start_date', 'end_date', 'is_open_for_collaboration',
-            'goals', 'offer_rewards', 'recognition_type', 'award_criteria',
+            'offer_rewards', 'recognition_type', 'award_criteria',
             'lead_school', 'contact_person_name', 'contact_person_email',
-            'contact_person_role', 'contact_country', 'contact_city'
+            'contact_person_role', 'contact_country', 'contact_city', 'goals'
         ]
     
     def create(self, validated_data):
+        goals_data = validated_data.pop('goals', [])
         validated_data['created_by'] = self.context['request'].user
-        return super().create(validated_data)
+        project = super().create(validated_data)
+        for goal_description in goals_data:
+            ProjectGoal.objects.create(project=project, description=goal_description)
+        return project
+
+
+class ProjectGoalSerializer(serializers.ModelSerializer):
+    """Serializer for project goals"""
+    class Meta:
+        model = ProjectGoal
+        fields = ['id', 'project', 'description', 'is_completed', 'completed_at']
+        read_only_fields = ['id', 'project', 'completed_at']
+
+
+class ProjectFileSerializer(serializers.ModelSerializer):
+    """Serializer for project files"""
+    class Meta:
+        model = ProjectFile
+        fields = ['id', 'project', 'file', 'description', 'uploaded_at']
+        read_only_fields = ['id', 'project', 'uploaded_at']
+
+
+class ProjectUpdateMediaSerializer(serializers.ModelSerializer):
+    """Serializer for media files attached to a project update."""
+    class Meta:
+        model = ProjectUpdateMedia
+        fields = ['id', 'file', 'media_type']
+
+
+class ProjectUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for creating and viewing project updates."""
+    media = ProjectUpdateMediaSerializer(many=True, read_only=True)
+    uploaded_files = serializers.ListField(
+        child=serializers.FileField(), write_only=True
+    )
+    uploaded_by_name = serializers.CharField(source='uploaded_by.get_full_name', read_only=True)
+    school_name = serializers.CharField(source='school.name', read_only=True)
+
+    class Meta:
+        model = ProjectUpdate
+        fields = [
+            'id', 'project', 'school', 'school_name', 'uploaded_by', 'uploaded_by_name',
+            'description', 'created_at', 'media', 'uploaded_files'
+        ]
+        read_only_fields = ['id', 'project', 'school', 'school_name', 'uploaded_by', 'uploaded_by_name', 'created_at']
+
+    def create(self, validated_data):
+        uploaded_files = validated_data.pop('uploaded_files')
+        update = ProjectUpdate.objects.create(**validated_data)
+
+        for file in uploaded_files:
+            # Simple content-type based check
+            media_type = 'file'
+            if file.content_type.startswith('image'):
+                media_type = 'image'
+            elif file.content_type.startswith('video'):
+                media_type = 'video'
+            
+            ProjectUpdateMedia.objects.create(update=update, file=file, media_type=media_type)
+
+        return update
 
 
 class ProjectParticipationSerializer(serializers.ModelSerializer):

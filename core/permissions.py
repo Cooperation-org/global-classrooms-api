@@ -167,6 +167,36 @@ class IsProjectCreatorOrCollaborator(permissions.BasePermission):
         return False
 
 
+class IsProjectOwnerOrParticipant(permissions.BasePermission):
+    """
+    Custom permission to only allow project owners or active participants to edit a project.
+    Read-only for other authenticated users.
+    """
+    def has_object_permission(self, request, view, obj):
+        # Read permissions are allowed to any authenticated user
+        if request.method in permissions.SAFE_METHODS:
+            return True
+
+        # Write permissions are only allowed to the owner or a participant.
+        # 1. Check if the user is the project creator
+        if obj.created_by == request.user:
+            return True
+            
+        # 2. Check if the user is a member of the lead school
+        if obj.lead_school.memberships.filter(user=request.user, is_active=True).exists():
+            return True
+
+        # 3. Check if the user is a member of any participating school
+        user_school_ids = request.user.school_memberships.filter(is_active=True).values_list('school_id', flat=True)
+        project_school_ids = obj.participating_schools.all().values_list('id', flat=True)
+        
+        # Check for intersection between the user's schools and the project's schools
+        if set(user_school_ids).intersection(set(project_school_ids)):
+            return True
+
+        return False
+
+
 class IsCertificateRecipientOrIssuer(permissions.BasePermission):
     """
     Permission for certificate operations.

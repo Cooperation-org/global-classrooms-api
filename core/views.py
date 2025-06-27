@@ -27,7 +27,7 @@ from drf_spectacular.types import OpenApiTypes
 from .models import (
     User, School, Subject, Class, TeacherProfile, StudentProfile,
     Project, ProjectParticipation, EnvironmentalImpact, Donation,
-    Certificate, SchoolMembership, EmailLoginOTP
+    Certificate, SchoolMembership, EmailLoginOTP, ProjectGoal, ProjectFile, ProjectUpdate
 )
 from .serializers import (
     UserRegistrationSerializer, UserSerializer, UserUpdateSerializer,
@@ -37,11 +37,14 @@ from .serializers import (
     ProjectCreateSerializer, ProjectParticipationSerializer,
     EnvironmentalImpactSerializer, ImpactStatsSerializer,
     DonationSerializer, DonationCreateSerializer, CertificateSerializer,
-    DashboardStatsSerializer, SchoolDashboardSerializer
+    DashboardStatsSerializer, SchoolDashboardSerializer, ProjectGoalSerializer,
+    ProjectFileSerializer, ProjectUpdateSerializer
 )
-from .permissions import IsOwnerOrReadOnly, IsSchoolAdminOrReadOnly, IsTeacherOrReadOnly
+from .permissions import IsOwnerOrReadOnly, IsSchoolAdminOrReadOnly, IsTeacherOrReadOnly, IsProjectOwnerOrParticipant
 from .filters import ProjectFilter, SchoolFilter, EnvironmentalImpactFilter
 from rest_framework.permissions import AllowAny
+from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 
 
 # =============================================================================
@@ -187,34 +190,6 @@ class PasswordChangeView(APIView):
             user.save()
             return Response({'message': 'Password changed successfully'})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class EmailLoginView(APIView):
-    permission_classes = [AllowAny]
-    def post(self, request):
-        email = request.data.get('email')
-        password = request.data.get('password')
-        if not email or not password:
-            return Response({'error': 'Email and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response({'error': 'No user with this email.'}, status=status.HTTP_401_UNAUTHORIZED)
-        if not user.check_password(password):
-            return Response({'error': 'Invalid password.'}, status=status.HTTP_401_UNAUTHORIZED)
-        if not user.is_active:
-            return Response({'error': 'User is inactive.'}, status=status.HTTP_403_FORBIDDEN)
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            'user': {
-                'id': str(user.id),
-                'username': user.username,
-                'email': user.email,
-            },
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            }
-        }, status=status.HTTP_200_OK)
 
 
 # =============================================================================
@@ -426,7 +401,7 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
 class ProjectViewSet(viewsets.ModelViewSet):
     """ViewSet for managing projects"""
     queryset = Project.objects.all()
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [IsProjectOwnerOrParticipant]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = ProjectFilter
     search_fields = ['title', 'short_description', 'lead_school__name']
@@ -439,17 +414,22 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return ProjectSerializer
     
     def get_permissions(self):
-        if self.action in ['update', 'partial_update', 'destroy']:
-            permission_classes = [IsOwnerOrReadOnly]
-        elif self.action == 'create':
-            permission_classes = [permissions.IsAuthenticated]
-        else:
-            permission_classes = [permissions.AllowAny]
-        return [permission() for permission in permission_classes]
+        """
+        Instantiates and returns the list of permissions that this view requires.
+        """
+        if self.action == 'create':
+            self.permission_classes = [permissions.IsAuthenticated]
+        elif self.action in ['update', 'partial_update', 'destroy', 'join', 'impacts']:
+            self.permission_classes = [IsProjectOwnerOrParticipant]
+        else: # list, retrieve
+            self.permission_classes = [permissions.AllowAny]
+        return [permission() for permission in self.permission_classes]
     
     @action(detail=True, methods=['post'])
     def join(self, request, pk=None):
-        """Join a project"""
+        """
+        Allows a school to join a project.
+        """
         project = self.get_object()
         user = request.user
         
@@ -863,5 +843,57 @@ def search_users(request):
     
     serializer = UserSerializer(page, many=True)
     return paginator.get_paginated_response(serializer.data)
+
+
+class ProjectGoalViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing project goals."""
+    queryset = ProjectGoal.objects.all()
+    serializer_class = ProjectGoalSerializer
+    permission_classes = [IsProjectOwnerOrParticipant]
+
+    def get_queryset(self):
+        """Only show goals for projects the user has access to."""
+        # This part can be enhanced based on more complex visibility rules
+        return ProjectGoal.objects.filter(project_id=self.kwargs['project_pk'])
+
+    def perform_create(self, serializer):
+        project = get_object_or_404(Project, pk=self.kwargs['project_pk'])
+        serializer.save(project=project)
+
+
+class ProjectFileViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing project files."""
+    queryset = ProjectFile.objects.all()
+    serializer_class = ProjectFileSerializer
+    permission_classes = [IsProjectOwnerOrParticipant]
+
+    def get_queryset(self):
+        return ProjectFile.objects.filter(project_id=self.kwargs['project_pk'])
+
+    def perform_create(self, serializer):
+        project = get_object_or_404(Project, pk=self.kwargs['project_pk'])
+        serializer.save(project=project)
+
+
+class ProjectUpdateViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing project updates."""
+    queryset = ProjectUpdate.objects.all()
+    serializer_class = ProjectUpdateSerializer
+    permission_classes = [IsProjectOwnerOrParticipant]
+
+    def get_queryset(self):
+        return ProjectUpdate.objects.filter(project_id=self.kwargs['project_pk']).order_by('-created_at')
+
+    def perform_create(self, serializer):
+        project = get_object_or_404(Project, pk=self.kwargs['project_pk'])
+        school_membership = self.request.user.school_memberships.filter(is_active=True).first()
+        if not school_membership:
+            raise serializers.ValidationError("User is not an active member of any school.")
+            
+        serializer.save(
+            project=project,
+            uploaded_by=self.request.user,
+            school=school_membership.school
+        )
 
 from .additional_views import *
