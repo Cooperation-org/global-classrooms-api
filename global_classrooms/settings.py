@@ -361,7 +361,6 @@ cloudinary.config(
 
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
-# Comment out local media storage settings if present
-# MEDIA_ROOT = ...
-# MEDIA_URL = ...
-# DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
+if not DEBUG:
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
