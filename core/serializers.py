@@ -22,6 +22,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     """Serializer for user registration"""
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True)
+    email = serializers.EmailField(required=True)
     wallet_address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     google_account_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     signup_method = serializers.CharField(required=False, allow_blank=True, allow_null=True)
@@ -43,6 +44,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         validated_data.pop('password_confirm')
         password = validated_data.pop('password')
         validated_data['username'] = validated_data['email']
+        validated_data['signup_method'] = 'email'
         user = User.objects.create_user(**validated_data)
         user.set_password(password)
         user.save()
@@ -59,7 +61,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name', 'full_name',
             'role', 'mobile_number', 'gender', 'date_of_birth', 'profile_picture',
-            'city', 'country', 'is_active', 'date_joined', 'school_count'
+            'city', 'country', 'is_active', 'date_joined', 'school_count', 'signup_method'
         ]
         read_only_fields = ['id', 'date_joined', 'full_name', 'school_count']
     

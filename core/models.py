@@ -24,7 +24,7 @@ class User(AbstractUser):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(unique=True)
+    email = models.EmailField(unique=True, blank=True, null=True)
     role = models.CharField(max_length=20, choices=USER_ROLES, default='student')
     mobile_number = models.CharField(max_length=20, blank=True, null=True)
     gender = models.CharField(max_length=20, choices=GENDER_CHOICES, blank=True, null=True)
@@ -40,22 +40,31 @@ class User(AbstractUser):
     date_joined_school = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    # Wallet/account fields
-    wallet_address = models.CharField(max_length=255, blank=True, null=True)
+    wallet_address = models.CharField(max_length=255, unique=True, blank=True, null=True)
     google_account_id = models.CharField(max_length=255, blank=True, null=True)
     signup_method = models.CharField(
         max_length=50,
         choices=[
+            ('email', 'Email'),  
             ('wallet', 'Wallet'),
-            ('custodial', 'Custodial Wallet'),
+            ('otp', 'OTP'),
             ('google', 'Google'),
+
         ],
-        default='wallet'
+        default='email'
     )
 
     # Use email for authentication instead of username
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']  # username is still required for superuser creation, etc.
+
+    def save(self, *args, **kwargs):
+        if not self.username:
+            if self.wallet_address:
+                self.username = self.wallet_address
+            elif self.email:
+                self.username = self.email
+        super().save(*args, **kwargs)
 
     # Fix the reverse accessor conflicts
     groups = models.ManyToManyField(

@@ -80,6 +80,43 @@ class UserRegistrationView(CreateAPIView):
             }
         }, status=status.HTTP_201_CREATED)
 
+
+
+class WalletRegistrationView(APIView):
+    """Register with just wallet address"""
+    permission_classes = [permissions.AllowAny]
+    
+    def post(self, request):
+        wallet_address = request.data.get('wallet_address')
+        
+        if not wallet_address:
+            return Response({'error': 'wallet_address is required'}, status=400)
+        
+        # Check if wallet already exists
+        if User.objects.filter(wallet_address=wallet_address).exists():
+            return Response({'error': 'Wallet already registered'}, status=400)
+        
+        # Create user with wallet only
+        user = User.objects.create(
+            wallet_address=wallet_address,
+            signup_method='wallet',
+            role=request.data.get('role', 'student'),
+            first_name=request.data.get('first_name', ''),
+            last_name=request.data.get('last_name', ''),
+            country=request.data.get('country', '')
+        )
+        
+        # Generate tokens
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'user': UserSerializer(user).data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        }, status=status.HTTP_201_CREATED)
+
 class WalletLoginView(APIView):
     """Login using wallet address"""
     permission_classes = [permissions.AllowAny]

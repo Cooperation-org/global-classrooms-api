@@ -11,13 +11,13 @@ from .models import (
 # Custom User Admin
 @admin.register(User)
 class CustomUserAdmin(BaseUserAdmin):
-    list_display = ('username', 'email', 'first_name', 'last_name', 'role', 'city', 'country', 'is_staff')
+    list_display = ('username', 'email', 'first_name', 'last_name', 'role', 'city', 'country', 'is_staff', 'wallet_address', 'signup_method')
     list_filter = ('role', 'gender', 'country', 'is_staff', 'is_active')
     search_fields = ('username', 'email', 'first_name', 'last_name')
     
     fieldsets = BaseUserAdmin.fieldsets + (
         ('Additional Info', {
-            'fields': ('role', 'mobile_number', 'gender', 'date_of_birth', 'city', 'country', 'profile_picture')
+            'fields': ('role', 'mobile_number', 'gender', 'date_of_birth', 'city', 'country', 'profile_picture', 'wallet_address', 'signup_method')
         }),
     )
 
