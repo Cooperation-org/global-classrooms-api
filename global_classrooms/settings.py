@@ -121,14 +121,9 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Static files storage for production
-# STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+if not DEBUG:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# Additional static files directories
-STATICFILES_DIRS = [
-    BASE_DIR / 'static',
-]
-# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # =============================================================================
@@ -373,6 +368,10 @@ if 'DATABASE_URL' in os.environ:
 # if not DEBUG:
 #     MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 #     STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+
+# Quick fix for admin styling - use Django's CDN
+# if not DEBUG:
+#     STATIC_URL = 'https://unpkg.com/django-admin-interface@0.19.1/admin_interface/static/'
 
 # if not DEBUG:
 #     STATIC_URL = 'https://cdn.jsdelivr.net/npm/django-admin@1.0.0/static/'
