@@ -369,3 +369,6 @@ if 'DATABASE_URL' in os.environ:
 if not DEBUG:
     MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
     STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+
+if not DEBUG:
+    STATIC_URL = 'https://cdn.jsdelivr.net/npm/django-admin@1.0.0/static/'
