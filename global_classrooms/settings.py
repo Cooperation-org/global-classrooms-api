@@ -54,7 +54,6 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware', 
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    # 'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -200,6 +199,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3001",
 ]
 
+
+
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all origins in development
@@ -216,6 +217,20 @@ CORS_ALLOWED_HEADERS = [
     'x-requested-with',
 ]
 
+
+CSRF_TRUSTED_ORIGINS = []
+
+railway_url = config('RAILWAY_URL', default=None)
+if railway_url:
+    CSRF_TRUSTED_ORIGINS.append(railway_url)
+
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS.extend([
+        'http://localhost:8000',
+        'http://127.0.0.1:8000',
+        'http://localhost:3000',  
+    ])
+    
 # =============================================================================
 # API DOCUMENTATION (Swagger)
 # =============================================================================
