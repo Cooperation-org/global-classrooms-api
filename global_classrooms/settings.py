@@ -121,8 +121,8 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-if not DEBUG:
-    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+if not DEBUG: 	
+    ADMIN_MEDIA_PREFIX = 'https://cdn.jsdelivr.net/npm/django@4.2.7/django/contrib/admin/static/admin/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
