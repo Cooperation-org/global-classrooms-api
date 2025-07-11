@@ -342,3 +342,434 @@ def can_user_modify_school(user, school):
     
     # Only school admin can modify
     return school.admin == user
+
+
+class CanCreateSchool(permissions.BasePermission):
+    """
+    Permission to control who can create schools.
+    Only teachers and school admins can create schools.
+    """
+    
+    def has_permission(self, request, view):
+        # Only authenticated users can create schools
+        if not request.user.is_authenticated:
+            return False
+        
+        # Staff can always create schools
+        if request.user.is_staff:
+            return True
+        
+        # Super admins can create schools
+        if request.user.role == 'super_admin':
+            return True
+        
+        # Check if user has the right role
+        if request.user.role in ['school_admin', 'teacher']:
+            return True
+        
+        return False
+
+
+class CanCreateProject(permissions.BasePermission):
+    """
+    Permission to control who can create projects.
+    Only school members (teachers, school_admins) can create projects.
+    """
+    
+    def has_permission(self, request, view):
+        # Only authenticated users can create projects
+        if not request.user.is_authenticated:
+            return False
+        
+        # Staff can always create projects
+        if request.user.is_staff:
+            return True
+        
+        # Super admins can create projects
+        if request.user.role == 'super_admin':
+            return True
+        
+        # School admins can create projects
+        if request.user.role == 'school_admin':
+            return True
+        
+        # Teachers can create projects
+        if request.user.role == 'teacher':
+            return True
+        
+        # Students and donors cannot create projects
+        return False
+
+
+class CanManageSchoolContent(permissions.BasePermission):
+    """
+    Permission for managing school-related content (students, teachers, classes).
+    Only school admins and teachers from the same school can manage content.
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Only school admins and teachers can manage school content
+        return request.user.role in ['school_admin', 'teacher']
+    
+    def has_object_permission(self, request, view, obj):
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Get the school from the object
+        school = None
+        if hasattr(obj, 'school'):
+            school = obj.school
+        elif hasattr(obj, 'admin'):  # For School model itself
+            school = obj
+        
+        if not school:
+            return False
+        
+        # School admin can manage everything in their school
+        if school.admin == request.user:
+            return True
+        
+        # Teachers can manage content in schools they're members of
+        if request.user.role == 'teacher':
+            return request.user.school_memberships.filter(
+                school=school,
+                is_active=True
+            ).exists()
+        
+        return False
+
+
+class CanJoinProject(permissions.BasePermission):
+    """
+    Permission to control who can join projects.
+    Only school members can join projects on behalf of their schools.
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Users must be members of at least one school to join projects
+        return request.user.school_memberships.filter(is_active=True).exists()
+
+
+class CanManageProjectContent(permissions.BasePermission):
+    """
+    Permission for managing project-related content (goals, files, updates).
+    Only project creators and participating school members can manage content.
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Users must be school members to contribute to projects
+        return request.user.school_memberships.filter(is_active=True).exists()
+    
+    def has_object_permission(self, request, view, obj):
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Get the project from the object
+        project = None
+        if hasattr(obj, 'project'):
+            project = obj.project
+        elif hasattr(obj, 'created_by'):  # For Project model itself
+            project = obj
+        
+        if not project:
+            return False
+        
+        # Project creator can manage
+        if project.created_by == request.user:
+            return True
+        
+        # Lead school members can manage
+        if request.user.school_memberships.filter(
+            school=project.lead_school,
+            is_active=True
+        ).exists():
+            return True
+        
+        # Participating school members can manage
+        user_schools = request.user.school_memberships.filter(
+            is_active=True
+        ).values_list('school', flat=True)
+        
+        project_schools = project.participating_schools.values_list('id', flat=True)
+        
+        return bool(set(user_schools).intersection(set(project_schools)))
+
+
+class CanUpdateProjectProgress(permissions.BasePermission):
+    """
+    Permission for updating project progress (ProjectUpdate model).
+    Students, teachers, and school admins can add progress updates if they're part of the project.
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Users must be school members to contribute to projects
+        return request.user.school_memberships.filter(is_active=True).exists()
+    
+    def has_object_permission(self, request, view, obj):
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Get the project from the object
+        project = None
+        if hasattr(obj, 'project'):
+            project = obj.project
+        elif hasattr(obj, 'created_by'):  # For Project model itself
+            project = obj
+        
+        if not project:
+            return False
+        
+        # Project creator can manage
+        if project.created_by == request.user:
+            return True
+        
+        # Lead school members (including students) can add progress updates
+        if request.user.school_memberships.filter(
+            school=project.lead_school,
+            is_active=True
+        ).exists():
+            return True
+        
+        # Participating school members (including students) can add progress updates
+        user_schools = request.user.school_memberships.filter(
+            is_active=True
+        ).values_list('school', flat=True)
+        
+        project_schools = project.participating_schools.values_list('id', flat=True)
+        
+        return bool(set(user_schools).intersection(set(project_schools)))
+
+
+class CanManageProjectStructure(permissions.BasePermission):
+    """
+    Permission for managing project structure (goals, files, main project details).
+    Only teachers, school admins, and super admins can modify project structure.
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Only teachers and school admins can manage project structure
+        return request.user.role in ['teacher', 'school_admin', 'super_admin']
+    
+    def has_object_permission(self, request, view, obj):
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Get the project from the object
+        project = None
+        if hasattr(obj, 'project'):
+            project = obj.project
+        elif hasattr(obj, 'created_by'):  # For Project model itself
+            project = obj
+        
+        if not project:
+            return False
+        
+        # Project creator can manage
+        if project.created_by == request.user:
+            return True
+        
+        # Only teachers and school admins from participating schools can manage structure
+        if request.user.role not in ['teacher', 'school_admin', 'super_admin']:
+            return False
+        
+        # Lead school teachers/admins can manage
+        if (request.user.school_memberships.filter(
+            school=project.lead_school,
+            is_active=True
+        ).exists() and request.user.role in ['teacher', 'school_admin']):
+            return True
+        
+        # Participating school teachers/admins can manage
+        user_schools = request.user.school_memberships.filter(
+            is_active=True
+        ).values_list('school', flat=True)
+        
+        project_schools = project.participating_schools.values_list('id', flat=True)
+        
+        return (bool(set(user_schools).intersection(set(project_schools))) and 
+                request.user.role in ['teacher', 'school_admin'])
+
+
+class CanManageSchoolMembers(permissions.BasePermission):
+    """
+    Permission for school admins to add/remove teachers and students to/from their school.
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Only school admins can manage school members
+        return request.user.role in ['school_admin', 'super_admin']
+    
+    def has_object_permission(self, request, view, obj):
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Get the school from the object
+        school = None
+        if hasattr(obj, 'school'):
+            school = obj.school
+        elif hasattr(obj, 'admin'):  # For School model itself
+            school = obj
+        
+        if not school:
+            return False
+        
+        # Only the school admin can manage members of their school
+        return school.admin == request.user
+
+
+class CanManageProjectParticipants(permissions.BasePermission):
+    """
+    Permission for teachers to add/remove students to/from projects.
+    Only teachers from the lead school or participating schools can manage participants.
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Only teachers and school admins can manage project participants
+        return request.user.role in ['teacher', 'school_admin', 'super_admin']
+    
+    def has_object_permission(self, request, view, obj):
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Get the project from the object
+        project = None
+        if hasattr(obj, 'project'):
+            project = obj.project
+        elif hasattr(obj, 'created_by'):  # For Project model itself
+            project = obj
+        
+        if not project:
+            return False
+        
+        # Project creator can manage participants
+        if project.created_by == request.user:
+            return True
+        
+        # Only teachers/admins from lead school can manage participants
+        if (request.user.school_memberships.filter(
+            school=project.lead_school,
+            is_active=True
+        ).exists() and request.user.role in ['teacher', 'school_admin']):
+            return True
+        
+        # Teachers/admins from participating schools can manage their own school's participants
+        user_schools = request.user.school_memberships.filter(
+            is_active=True
+        ).values_list('school', flat=True)
+        
+        project_schools = project.participating_schools.values_list('id', flat=True)
+        
+        return (bool(set(user_schools).intersection(set(project_schools))) and 
+                request.user.role in ['teacher', 'school_admin'])
+
+
+class CanUploadProjectProgress(permissions.BasePermission):
+    """
+    Permission for students to upload progress to projects they're participants in.
+    Only students who are explicitly added to projects can upload progress.
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # All school members can potentially upload progress
+        return request.user.school_memberships.filter(is_active=True).exists()
+    
+    def has_object_permission(self, request, view, obj):
+        # Staff can do anything
+        if request.user.is_staff:
+            return True
+        
+        # Get the project from the object
+        project = None
+        if hasattr(obj, 'project'):
+            project = obj.project
+        elif hasattr(obj, 'created_by'):  # For Project model itself
+            project = obj
+        
+        if not project:
+            return False
+        
+        # Teachers and school admins can always upload
+        if request.user.role in ['teacher', 'school_admin', 'super_admin']:
+            # Check if they're from participating schools
+            user_schools = request.user.school_memberships.filter(
+                is_active=True
+            ).values_list('school', flat=True)
+            
+            project_schools = list(project.participating_schools.values_list('id', flat=True))
+            if project.lead_school.id not in project_schools:
+                project_schools.append(project.lead_school.id)
+            
+            return bool(set(user_schools).intersection(set(project_schools)))
+        
+        # Students can only upload if they're explicitly added as project participants
+        if request.user.role == 'student':
+            from .models import ProjectParticipant
+            return ProjectParticipant.objects.filter(
+                project=project,
+                student=request.user,
+                is_active=True
+            ).exists()
+        
+        return False

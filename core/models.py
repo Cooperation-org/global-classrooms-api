@@ -167,8 +167,12 @@ class School(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
-    # Admin who manages this school
+    # Admin who manages this school (creator becomes admin)
     admin = models.ForeignKey(User, on_delete=models.CASCADE, related_name='managed_schools')
+
+    class Meta:
+        # Ensure school names are unique within the same city/country to prevent duplicates
+        unique_together = [['name', 'city', 'country']]
 
     def __str__(self):
         return self.name
@@ -360,6 +364,23 @@ class ProjectParticipation(models.Model):
 
     def __str__(self):
         return f"{self.school.name} in {self.project.title}"
+
+
+class ProjectParticipant(models.Model):
+    """Tracks individual student participation in projects"""
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='participants')
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='project_participations')
+    student_class = models.ForeignKey(Class, on_delete=models.CASCADE, related_name='project_participations')
+    added_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='added_project_participants')
+    joined_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        unique_together = ['project', 'student']
+        ordering = ['student_class__name', 'student__first_name', 'student__last_name']
+
+    def __str__(self):
+        return f"{self.student.get_full_name()} ({self.student_class.name}) in {self.project.title}"
 
 
 class ProjectUpdate(models.Model):
