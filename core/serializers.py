@@ -10,7 +10,8 @@ from django.core.exceptions import ValidationError
 from .models import (
     User, School, Subject, Class, TeacherProfile, StudentProfile,
     Project, ProjectParticipation, EnvironmentalImpact, Donation,
-    Certificate, SchoolMembership, ProjectGoal, ProjectFile, ProjectUpdate, ProjectUpdateMedia
+    Certificate, SchoolMembership, ProjectGoal, ProjectFile, ProjectUpdate, ProjectUpdateMedia,
+    ProjectParticipant
 )
 
 
@@ -140,10 +141,50 @@ class SchoolCreateSerializer(serializers.ModelSerializer):
             'number_of_teachers', 'medium_of_instruction', 'logo'
         ]
     
+    def validate(self, attrs):
+        """Validate school creation data"""
+        
+        # Check if school with same name exists in same city/country
+        existing_school = School.objects.filter(
+            name__iexact=attrs['name'],
+            city__iexact=attrs['city'],
+            country__iexact=attrs['country'],
+            is_active=True
+        ).exists()
+        
+        if existing_school:
+            raise serializers.ValidationError(
+                f"A school named '{attrs['name']}' already exists in {attrs['city']}, {attrs['country']}. "
+                "Please choose a different name or verify this is not a duplicate."
+            )
+        
+        # Check if registration number is unique
+        if attrs.get('registration_number'):
+            existing_reg = School.objects.filter(
+                registration_number=attrs['registration_number'],
+                is_active=True
+            ).exists()
+            
+            if existing_reg:
+                raise serializers.ValidationError(
+                    f"A school with registration number '{attrs['registration_number']}' already exists."
+                )
+        
+        return attrs
+    
     def create(self, validated_data):
-        # Set the admin to the current user
+        # Set the admin to the current user (creator becomes admin)
         validated_data['admin'] = self.context['request'].user
-        return super().create(validated_data)
+        school = super().create(validated_data)
+        
+        # Automatically create a school membership for the creator
+        SchoolMembership.objects.create(
+            user=self.context['request'].user,
+            school=school,
+            is_active=True
+        )
+        
+        return school
 
 
 class SchoolMembershipSerializer(serializers.ModelSerializer):
@@ -454,3 +495,24 @@ class SchoolDashboardSerializer(serializers.Serializer):
     total_impact = ImpactStatsSerializer()
     recent_projects = ProjectSerializer(many=True)
     recent_impacts = EnvironmentalImpactSerializer(many=True)
+
+
+# =============================================================================
+# PROJECT PARTICIPANT SERIALIZERS
+# =============================================================================
+
+class ProjectParticipantSerializer(serializers.ModelSerializer):
+    """Serializer for project participants"""
+    student_name = serializers.CharField(source='student.get_full_name', read_only=True)
+    student_email = serializers.CharField(source='student.email', read_only=True)
+    class_name = serializers.CharField(source='student_class.name', read_only=True)
+    added_by_name = serializers.CharField(source='added_by.get_full_name', read_only=True)
+    
+    class Meta:
+        model = ProjectParticipant
+        fields = [
+            'id', 'project', 'student', 'student_name', 'student_email',
+            'student_class', 'class_name', 'added_by', 'added_by_name',
+            'joined_at', 'is_active'
+        ]
+        read_only_fields = ['id', 'joined_at', 'added_by']
