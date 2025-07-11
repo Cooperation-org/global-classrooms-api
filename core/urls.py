@@ -34,6 +34,7 @@ projects_router = routers.NestedSimpleRouter(router, r'projects', lookup='projec
 projects_router.register(r'goals', views.ProjectGoalViewSet, basename='project-goals')
 projects_router.register(r'files', views.ProjectFileViewSet, basename='project-files')
 projects_router.register(r'updates', views.ProjectUpdateViewSet, basename='project-updates')
+projects_router.register(r'participants', views.ProjectParticipantViewSet, basename='project-participants')
 
 # Define URL patterns
 urlpatterns = [
@@ -74,15 +75,20 @@ urlpatterns = [
     path('projects/featured/', views.get_featured_projects, name='featured-projects'),
     path('projects/<uuid:pk>/join/', views.ProjectViewSet.as_view({'post': 'join'}), name='project-join'),
     path('projects/<uuid:pk>/impacts/', views.ProjectViewSet.as_view({'get': 'impacts'}), name='project-impacts'),
+    path('projects/<uuid:project_id>/add-class/<uuid:class_id>/', views.add_class_to_project, name='add-class-to-project'),
     
     # =================================================================
     # CUSTOM SCHOOL ENDPOINTS
     # =================================================================
     path('schools/featured/', views.get_featured_schools, name='featured-schools'),
+    path('schools/can-create/', views.can_create_school, name='can-create-school'),
+    path('schools/check-exists/', views.check_school_exists, name='check-school-exists'),
     path('schools/<uuid:pk>/dashboard/', views.SchoolViewSet.as_view({'get': 'dashboard'}), name='school-dashboard'),
     path('schools/<uuid:pk>/join/', views.SchoolViewSet.as_view({'post': 'join'}), name='school-join'),
     path('schools/<uuid:pk>/members/', views.get_school_members, name='school-members'),
     path('schools/<uuid:pk>/projects/', views.get_school_projects, name='school-projects'),
+    path('schools/<uuid:school_id>/add-user/', views.add_user_to_school, name='add-user-to-school'),
+    path('classes/<uuid:class_id>/add-student/', views.add_student_to_class, name='add-student-to-class'),
     
     # =================================================================
     # CERTIFICATE VERIFICATION

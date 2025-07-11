@@ -27,7 +27,8 @@ from drf_spectacular.types import OpenApiTypes
 from .models import (
     User, School, Subject, Class, TeacherProfile, StudentProfile,
     Project, ProjectParticipation, EnvironmentalImpact, Donation,
-    Certificate, SchoolMembership, EmailLoginOTP, ProjectGoal, ProjectFile, ProjectUpdate
+    Certificate, SchoolMembership, EmailLoginOTP, ProjectGoal, ProjectFile, ProjectUpdate,
+    ProjectParticipant
 )
 from .serializers import (
     UserRegistrationSerializer, UserSerializer, UserUpdateSerializer,
@@ -38,9 +39,15 @@ from .serializers import (
     EnvironmentalImpactSerializer, ImpactStatsSerializer,
     DonationSerializer, DonationCreateSerializer, CertificateSerializer,
     DashboardStatsSerializer, SchoolDashboardSerializer, ProjectGoalSerializer,
-    ProjectFileSerializer, ProjectUpdateSerializer
+    ProjectFileSerializer, ProjectUpdateSerializer, ProjectParticipantSerializer
 )
-from .permissions import IsOwnerOrReadOnly, IsSchoolAdminOrReadOnly, IsTeacherOrReadOnly, IsProjectOwnerOrParticipant
+from .permissions import (
+    IsOwnerOrReadOnly, IsSchoolAdminOrReadOnly, IsTeacherOrReadOnly, 
+    IsProjectOwnerOrParticipant, CanCreateSchool, CanCreateProject,
+    CanManageSchoolContent, CanJoinProject, CanManageProjectContent,
+    CanUpdateProjectProgress, CanManageProjectStructure, CanManageSchoolMembers,
+    CanManageProjectParticipants, CanUploadProjectProgress
+)
 from .filters import ProjectFilter, SchoolFilter, EnvironmentalImpactFilter
 from rest_framework.permissions import AllowAny
 from rest_framework import serializers
@@ -275,7 +282,7 @@ class SchoolViewSet(viewsets.ModelViewSet):
         if self.action in ['update', 'partial_update', 'destroy']:
             permission_classes = [IsSchoolAdminOrReadOnly]
         elif self.action == 'create':
-            permission_classes = [permissions.IsAuthenticated]
+            permission_classes = [CanCreateSchool]
         else:
             permission_classes = [permissions.AllowAny]
         return [permission() for permission in permission_classes]
@@ -455,8 +462,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
         Instantiates and returns the list of permissions that this view requires.
         """
         if self.action == 'create':
-            self.permission_classes = [permissions.IsAuthenticated]
-        elif self.action in ['update', 'partial_update', 'destroy', 'join', 'impacts']:
+            self.permission_classes = [CanCreateProject]
+        elif self.action == 'join':
+            self.permission_classes = [CanJoinProject]
+        elif self.action in ['update', 'partial_update', 'destroy', 'impacts']:
             self.permission_classes = [IsProjectOwnerOrParticipant]
         else: # list, retrieve
             self.permission_classes = [permissions.AllowAny]
@@ -886,7 +895,7 @@ class ProjectGoalViewSet(viewsets.ModelViewSet):
     """ViewSet for managing project goals."""
     queryset = ProjectGoal.objects.all()
     serializer_class = ProjectGoalSerializer
-    permission_classes = [IsProjectOwnerOrParticipant]
+    permission_classes = [CanManageProjectStructure]
 
     def get_queryset(self):
         """Only show goals for projects the user has access to."""
@@ -902,7 +911,7 @@ class ProjectFileViewSet(viewsets.ModelViewSet):
     """ViewSet for managing project files."""
     queryset = ProjectFile.objects.all()
     serializer_class = ProjectFileSerializer
-    permission_classes = [IsProjectOwnerOrParticipant]
+    permission_classes = [CanManageProjectStructure]
 
     def get_queryset(self):
         return ProjectFile.objects.filter(project_id=self.kwargs['project_pk'])
@@ -916,7 +925,7 @@ class ProjectUpdateViewSet(viewsets.ModelViewSet):
     """ViewSet for managing project updates."""
     queryset = ProjectUpdate.objects.all()
     serializer_class = ProjectUpdateSerializer
-    permission_classes = [IsProjectOwnerOrParticipant]
+    permission_classes = [CanUploadProjectProgress]
 
     def get_queryset(self):
         return ProjectUpdate.objects.filter(project_id=self.kwargs['project_pk']).order_by('-created_at')
@@ -932,5 +941,312 @@ class ProjectUpdateViewSet(viewsets.ModelViewSet):
             uploaded_by=self.request.user,
             school=school_membership.school
         )
+
+
+class ProjectParticipantViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing individual student participation in projects."""
+    queryset = ProjectParticipant.objects.all()
+    serializer_class = ProjectParticipantSerializer
+    permission_classes = [CanManageProjectParticipants]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['project', 'student_class', 'is_active']
+
+    def get_queryset(self):
+        return ProjectParticipant.objects.filter(project_id=self.kwargs['project_pk']).order_by('student_class__name', 'student__first_name')
+
+    def perform_create(self, serializer):
+        project = get_object_or_404(Project, pk=self.kwargs['project_pk'])
+        serializer.save(
+            project=project,
+            added_by=self.request.user
+        )
+
+
+@api_view(['POST'])
+@permission_classes([CanManageProjectParticipants])
+def add_class_to_project(request, project_id, class_id):
+    """
+    Add all students from a specific class to a project.
+    Only teachers can add students to projects.
+    """
+    try:
+        project = get_object_or_404(Project, id=project_id)
+        student_class = get_object_or_404(Class, id=class_id)
+        
+        # Check if the teacher has permission for this project
+        if not CanManageProjectParticipants().has_object_permission(request, None, project):
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Get all students from this class
+        students = StudentProfile.objects.filter(
+            current_class=student_class,
+            user__is_active=True
+        ).select_related('user')
+        
+        added_students = []
+        already_added = []
+        
+        for student_profile in students:
+            participant, created = ProjectParticipant.objects.get_or_create(
+                project=project,
+                student=student_profile.user,
+                defaults={
+                    'student_class': student_class,
+                    'added_by': request.user,
+                    'is_active': True
+                }
+            )
+            
+            if created:
+                added_students.append({
+                    'id': str(student_profile.user.id),
+                    'name': student_profile.user.get_full_name(),
+                    'class': student_class.name
+                })
+            else:
+                already_added.append({
+                    'id': str(student_profile.user.id),
+                    'name': student_profile.user.get_full_name(),
+                    'class': student_class.name
+                })
+        
+        return Response({
+            'message': f'Successfully processed students from {student_class.name}',
+            'project_title': project.title,
+            'class_name': student_class.name,
+            'students_added': len(added_students),
+            'already_participating': len(already_added),
+            'added_students': added_students,
+            'already_added_students': already_added
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error adding class to project: {str(e)}")
+        return Response({'error': f'Failed to add class to project: {str(e)}'}, 
+                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([CanManageSchoolMembers])
+def add_user_to_school(request, school_id):
+    """
+    Add a user (teacher or student) to a school.
+    Only school admins can add users to their schools.
+    """
+    try:
+        school = get_object_or_404(School, id=school_id)
+        
+        # Check permission
+        if school.admin != request.user and not request.user.is_staff:
+            return Response({'error': 'Only school admins can add users to schools'}, 
+                           status=status.HTTP_403_FORBIDDEN)
+        
+        user_email = request.data.get('user_email')
+        user_role = request.data.get('user_role', 'student')
+        class_id = request.data.get('class_id')  # For students
+        
+        if not user_email:
+            return Response({'error': 'user_email is required'}, 
+                           status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user = User.objects.get(email=user_email)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, 
+                           status=status.HTTP_404_NOT_FOUND)
+        
+        # Create school membership
+        membership, created = SchoolMembership.objects.get_or_create(
+            user=user,
+            school=school,
+            defaults={'is_active': True}
+        )
+        
+        if not created and membership.is_active:
+            return Response({'error': 'User is already a member of this school'}, 
+                           status=status.HTTP_400_BAD_REQUEST)
+        elif not created:
+            membership.is_active = True
+            membership.save()
+        
+        # Update user role if needed
+        if user.role != user_role:
+            user.role = user_role
+            user.save()
+        
+        # Create appropriate profile
+        if user_role == 'teacher':
+            TeacherProfile.objects.get_or_create(
+                user=user,
+                school=school,
+                defaults={'teacher_role': 'subject_teacher', 'status': 'active'}
+            )
+        elif user_role == 'student' and class_id:
+            try:
+                student_class = Class.objects.get(id=class_id, school=school)
+                StudentProfile.objects.get_or_create(
+                    user=user,
+                    school=school,
+                    defaults={
+                        'student_id': f"{school.name[:3].upper()}{user.id}",
+                        'current_class': student_class
+                    }
+                )
+            except Class.DoesNotExist:
+                return Response({'error': 'Class not found in this school'}, 
+                               status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({
+            'message': f'Successfully added {user.get_full_name()} as {user_role} to {school.name}',
+            'user_id': str(user.id),
+            'user_name': user.get_full_name(),
+            'user_role': user_role,
+            'school_name': school.name
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error adding user to school: {str(e)}")
+        return Response({'error': f'Failed to add user to school: {str(e)}'}, 
+                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([CanManageSchoolContent])
+def add_student_to_class(request, class_id):
+    """
+    Add a student to a class. 
+    Only teachers can add students from their own school to classes.
+    """
+    try:
+        student_class = get_object_or_404(Class, id=class_id)
+        
+        # Check if teacher is from the same school
+        if not request.user.school_memberships.filter(
+            school=student_class.school,
+            is_active=True
+        ).exists():
+            return Response({'error': 'You can only manage classes from your own school'}, 
+                           status=status.HTTP_403_FORBIDDEN)
+        
+        student_id = request.data.get('student_id')
+        if not student_id:
+            return Response({'error': 'student_id is required'}, 
+                           status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            student = User.objects.get(id=student_id, role='student')
+        except User.DoesNotExist:
+            return Response({'error': 'Student not found'}, 
+                           status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if student is from the same school
+        if not student.school_memberships.filter(
+            school=student_class.school,
+            is_active=True
+        ).exists():
+            return Response({'error': 'Student must be from the same school'}, 
+                           status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update or create student profile
+        student_profile, created = StudentProfile.objects.get_or_create(
+            user=student,
+            school=student_class.school,
+            defaults={
+                'student_id': f"{student_class.school.name[:3].upper()}{student.id}",
+                'current_class': student_class
+            }
+        )
+        
+        if not created:
+            student_profile.current_class = student_class
+            student_profile.save()
+        
+        return Response({
+            'message': f'Successfully added {student.get_full_name()} to {student_class.name}',
+            'student_id': str(student.id),
+            'student_name': student.get_full_name(),
+            'class_name': student_class.name,
+            'school_name': student_class.school.name
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error adding student to class: {str(e)}")
+        return Response({'error': f'Failed to add student to class: {str(e)}'}, 
+                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def can_create_school(request):
+    """
+    Check if the current user can create a school.
+    Returns detailed information about creation eligibility.
+    """
+    user = request.user
+    
+    # Check role eligibility
+    if user.role not in ['teacher', 'school_admin', 'super_admin'] and not user.is_staff:
+        return Response({
+            'can_create': False,
+            'reason': 'role_not_allowed',
+            'message': 'Only teachers and school administrators can create schools.',
+            'user_role': user.role
+        })
+    
+    # User can create a school
+    return Response({
+        'can_create': True,
+        'message': 'You are eligible to create a school.',
+        'user_role': user.role,
+        'existing_schools': list(user.managed_schools.filter(is_active=True).values(
+            'id', 'name', 'city', 'country', 'created_at'
+        ))
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def check_school_exists(request):
+    """
+    Check if a school with given name/location already exists.
+    Helps prevent duplicate creation attempts.
+    """
+    name = request.GET.get('name', '').strip()
+    city = request.GET.get('city', '').strip()
+    country = request.GET.get('country', '').strip()
+    registration_number = request.GET.get('registration_number', '').strip()
+    
+    if not name or not city or not country:
+        return Response({
+            'error': 'name, city, and country parameters are required'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Check for duplicate school name in same location
+    name_exists = School.objects.filter(
+        name__iexact=name,
+        city__iexact=city,
+        country__iexact=country,
+        is_active=True
+    ).exists()
+    
+    # Check for duplicate registration number
+    registration_exists = False
+    if registration_number:
+        registration_exists = School.objects.filter(
+            registration_number=registration_number,
+            is_active=True
+        ).exists()
+    
+    return Response({
+        'name_exists': name_exists,
+        'registration_exists': registration_exists,
+        'can_create': not name_exists and not registration_exists,
+        'message': (
+            'School name already exists in this location.' if name_exists else
+            'Registration number already exists.' if registration_exists else
+            'School name and registration are available.'
+        )
+    })
+
 
 from .additional_views import *
