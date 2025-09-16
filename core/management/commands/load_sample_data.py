@@ -165,11 +165,12 @@ class Command(BaseCommand):
                 'start_date': date.today(),
                 'end_date': date.today() + timedelta(days=180),
                 'is_open_for_collaboration': True,
-                'goals': [
-                    'Plant 500 trees in school grounds',
-                    'Engage 200+ students in environmental activities',
-                    'Reduce school waste by 30%'
-                ],
+                # goals is not in the schema?
+                # 'goals': [
+                #     'Plant 500 trees in school grounds',
+                #     'Engage 200+ students in environmental activities',
+                #     'Reduce school waste by 30%'
+                # ],
                 'offer_rewards': True,
                 'recognition_type': 'Certificate of Environmental Excellence',
                 'award_criteria': 'Active participation in all project phases',
