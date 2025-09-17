@@ -12,7 +12,7 @@ Backend service for Global Classrooms - managing environmental education project
 ```bash
 git clone <your-repo-url>
 cd global-classrooms-api
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
@@ -55,7 +55,7 @@ python manage.py createsuperuser
 python manage.py load_sample_data
 
 # 7. Start server
-python manage.py runserver
+python3 manage.py runserver
 ```
 
 ## Access Points
