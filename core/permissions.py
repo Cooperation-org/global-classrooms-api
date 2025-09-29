@@ -363,8 +363,12 @@ class CanCreateSchool(permissions.BasePermission):
         if request.user.role == 'super_admin':
             return True
         
+        # Users with null role are allowed
+        if request.user.role is None:
+            return True
+        
         # Check if user has the right role
-        if request.user.role in ['school_admin', 'teacher']:
+        if request.user.role in ['school_admin', 'teacher', 'student']:
             return True
         
         return False
