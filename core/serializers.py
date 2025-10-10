@@ -87,7 +87,8 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'first_name', 'last_name', 'mobile_number', 'gender', 
-            'date_of_birth', 'profile_picture', 'city', 'country'
+            'date_of_birth', 'profile_picture', 'city', 'country',
+            'role'
         ]
 
 
@@ -136,6 +137,9 @@ class SchoolSerializer(serializers.ModelSerializer):
 
 class SchoolCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating schools"""
+
+    creator_name = serializers.CharField(write_only=True)
+    creator_role = serializers.ChoiceField(choices=[choice for choice in User.USER_ROLES if choice[0] in ('student', 'teacher')], write_only=True)
     
     class Meta:
         model = School
@@ -145,7 +149,8 @@ class SchoolCreateSerializer(serializers.ModelSerializer):
             'address_line_2', 'city', 'state', 'postal_code', 'country',
             'phone_number', 'email', 'website', 'principal_name',
             'principal_email', 'principal_phone', 'number_of_students',
-            'number_of_teachers', 'medium_of_instruction', 'logo'
+            'number_of_teachers', 'medium_of_instruction', 'logo',
+            'creator_name', 'creator_role'
         ]
     
     def validate(self, attrs):
@@ -180,8 +185,28 @@ class SchoolCreateSerializer(serializers.ModelSerializer):
         return attrs
     
     def create(self, validated_data):
+
+        creator_name = validated_data.pop('creator_name')
+        creator_role = validated_data.pop('creator_role')
+
+        user = self.context['request'].user
+        
+        name_parts = creator_name.strip().split(' ', 1)
+        first_name = name_parts[0]
+        last_name = name_parts[1] if len(name_parts) > 1 else ''
+
+        user_data = {
+            'first_name': first_name,
+            'last_name': last_name,
+            'role': creator_role,
+        }
+        user_serializer = UserUpdateSerializer(user, data=user_data, partial=True)
+        user_serializer.is_valid(raise_exception=True)
+        user_serializer.save()
+
         # Set the admin to the current user (creator becomes admin)
-        validated_data['admin'] = self.context['request'].user
+        validated_data['admin'] = user
+
         school = super().create(validated_data)
         
         # Automatically create a school membership for the creator
