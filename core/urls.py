@@ -80,7 +80,7 @@ urlpatterns = [
     # =================================================================
     # CUSTOM CLASS ENDPOINTS
     # =================================================================
-    path('classes/classes-choices/', views.get_class_choices, name='class-choices'),
+    path('classes/class-choices/', views.get_class_choices, name='class-choices'),
     
     # =================================================================
     # CUSTOM SCHOOL ENDPOINTS
