@@ -139,7 +139,7 @@ class SchoolCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating schools"""
 
     creator_name = serializers.CharField(write_only=True)
-    creator_role = serializers.ChoiceField(choices=[choice for choice in User.USER_ROLES if choice[0] in ('student', 'teacher')], write_only=True)
+    creator_role = serializers.ChoiceField(choices=[choice for choice in User.USER_ROLES if choice[0] in ('teacher', 'school_admin')], write_only=True)
     
     class Meta:
         model = School
