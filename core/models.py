@@ -204,12 +204,44 @@ class Subject(models.Model):
 
 class Class(models.Model):
     """Class/Grade levels"""
-    name = models.CharField(max_length=50)  # e.g., "Grade 5", "Class 10", "Form 1"
+    class ClassName(models.TextChoices):
+        KINDERGARTEN = "Kindergarten", "Kindergarten (age ~5)"
+        GRADE_1 = "Grade 1", "Grade 1 (age ~6)"
+        GRADE_2 = "Grade 2", "Grade 2 (age ~7)"
+        GRADE_3 = "Grade 3", "Grade 3 (age ~8)"
+        GRADE_4 = "Grade 4", "Grade 4 (age ~9)"
+        GRADE_5 = "Grade 5", "Grade 5 (age ~10)"
+        GRADE_6 = "Grade 6", "Grade 6 (age ~11)"
+        GRADE_7 = "Grade 7", "Grade 7 (age ~12)"
+        GRADE_8 = "Grade 8", "Grade 8 (age ~13)"
+        GRADE_9 = "Grade 9", "Grade 9 (age ~14)"
+        GRADE_10 = "Grade 10", "Grade 10 (age ~15)"
+        GRADE_11 = "Grade 11", "Grade 11 (age ~16)"
+        GRADE_12 = "Grade 12", "Grade 12 (age ~17-18)"
+        JUNIOR_COLLEGE_1 = "Junior College (First Year)", "Junior College (First Year)"
+        JUNIOR_COLLEGE_2 = "Junior College (Second Year)", "Junior College (Second Year)"
+        PRE_UNIVERSITY_1 = "Pre-University (PUC 1st Year)", "Pre-University (PUC 1st Year)"
+        PRE_UNIVERSITY_2 = "Pre-University (PUC 2nd Year)", "Pre-University (PUC 2nd Year)"
+        FOUNDATION_YEAR = "Foundation Year", "Foundation Year"
+        DIPLOMA = "Diploma", "Diploma"
+        VOCATIONAL_COURSE = "Vocational Course", "Vocational Course"
+        TECH_TRAINING = "Technical Training / Trade School", "Technical Training / Trade School"
+        ASSOCIATE_DEGREE = "Associate Degree", "Associate Degree"
+        UNDERGRADUATE = "Undergraduate / Bachelor's Degree", "Undergraduate / Bachelor's Degree (BA, BSc, BCom, etc.)"
+        POSTGRADUATE = "Postgraduate / Master's Degree", "Postgraduate / Master's Degree (MA, MSc, MBA, etc.)"
+        DOCTORATE = "Doctorate / PhD / DPhil", "Doctorate / PhD / DPhil"
+
+    name = models.CharField(max_length=100, choices=ClassName.choices)
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='classes')
-    description = models.TextField(blank=True, null=True)
-    
+    description = models.TextField(blank=True, default='')
+
+    class Meta:
+        verbose_name_plural = "Classes"
+
     def __str__(self):
-        return f"{self.name} - {self.school.name}"
+        if self.school:
+            return f"{self.name} - {self.school.name}"
+        return self.name
 
 
 class TeacherProfile(models.Model):

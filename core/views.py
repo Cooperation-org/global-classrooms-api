@@ -1249,4 +1249,15 @@ def check_school_exists(request):
     })
 
 
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_class_choices(request):
+    """Return available class name choices"""
+    choices = [
+        {"value": choice[0], "label": choice[1]}
+        for choice in Class.ClassName.choices
+    ]
+    return Response(choices)
+
+
 from .additional_views import *
