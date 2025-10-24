@@ -1054,7 +1054,7 @@ def add_user_to_school(request, school_id):
         
         user_email = request.data.get('user_email')
         user_role = request.data.get('user_role', 'student')
-        class_id = request.data.get('class_id')  # For students
+        class_name = request.data.get('class_name')  # For students
         
         if not user_email:
             return Response({'error': 'user_email is required'}, 
@@ -1092,20 +1092,22 @@ def add_user_to_school(request, school_id):
                 school=school,
                 defaults={'teacher_role': 'subject_teacher', 'status': 'active'}
             )
-        elif user_role == 'student' and class_id:
-            try:
-                student_class = Class.objects.get(id=class_id, school=school)
-                StudentProfile.objects.get_or_create(
-                    user=user,
-                    school=school,
-                    defaults={
-                        'student_id': f"{school.name[:3].upper()}{user.id}",
-                        'current_class': student_class
-                    }
-                )
-            except Class.DoesNotExist:
-                return Response({'error': 'Class not found in this school'}, 
-                               status=status.HTTP_400_BAD_REQUEST)
+        elif user_role == 'student' and class_name:
+            student_class, _ = Class.objects.get_or_create(
+                name=class_name,
+                school=school,
+                defaults={
+                    'description': f'{class_name} class auto-created for {school.name}'
+                }
+            )
+            StudentProfile.objects.get_or_create(
+                user=user,
+                school=school,
+                defaults={
+                    'student_id': f"{school.name[:3].upper()}{user.id}",
+                    'current_class': student_class
+                }
+            )
         
         return Response({
             'message': f'Successfully added {user.get_full_name()} as {user_role} to {school.name}',
