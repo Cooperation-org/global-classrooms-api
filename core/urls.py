@@ -76,11 +76,6 @@ urlpatterns = [
     path('projects/<uuid:pk>/join/', views.ProjectViewSet.as_view({'post': 'join'}), name='project-join'),
     path('projects/<uuid:pk>/impacts/', views.ProjectViewSet.as_view({'get': 'impacts'}), name='project-impacts'),
     path('projects/<uuid:project_id>/add-class/<uuid:class_id>/', views.add_class_to_project, name='add-class-to-project'),
-
-    # =================================================================
-    # CUSTOM CLASS ENDPOINTS
-    # =================================================================
-    path('classes/class-choices/', views.get_class_choices, name='class-choices'),
     
     # =================================================================
     # CUSTOM SCHOOL ENDPOINTS

@@ -3,6 +3,7 @@ API Views for Global Classrooms
 Handles all REST API endpoints for the application
 """
 
+import logging
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import authenticate
 from django.db.models import Count, Sum, Q
@@ -49,9 +50,10 @@ from .permissions import (
     CanManageProjectParticipants, CanUploadProjectProgress
 )
 from .filters import ProjectFilter, SchoolFilter, EnvironmentalImpactFilter
-from rest_framework.permissions import AllowAny
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -396,6 +398,15 @@ class ClassViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ['school']
     search_fields = ['name']
+
+    @action(detail=False, methods=['get'], url_path='class-choices')
+    def class_choices(self, request):
+        """Return available class name choices"""
+        choices = [
+            {"value": choice[0], "label": choice[1]}
+            for choice in Class.ClassName.choices
+        ]
+        return Response(choices)
 
 
 # =============================================================================
@@ -1247,17 +1258,6 @@ def check_school_exists(request):
             'School name and registration are available.'
         )
     })
-
-
-@api_view(['GET'])
-@permission_classes([permissions.AllowAny])
-def get_class_choices(request):
-    """Return available class name choices"""
-    choices = [
-        {"value": choice[0], "label": choice[1]}
-        for choice in Class.ClassName.choices
-    ]
-    return Response(choices)
 
 
 from .additional_views import *
