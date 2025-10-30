@@ -230,6 +230,21 @@ class SchoolMembershipSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'school', 'user_name', 'user_role', 'school_name', 'joined_at', 'is_active']
         read_only_fields = ['id', 'joined_at']
 
+class SchoolAddTeacherSerializer(serializers.Serializer):
+    """Serializer for adding a teacher to school"""
+    teacher_email = serializers.EmailField(required=True)
+    teacher_role = serializers.ChoiceField(choices=TeacherProfile.TEACHER_ROLES, default="subject_teacher")
+    assigned_classes = serializers.ListField(
+        child=serializers.ChoiceField(choices=Class.ClassName.choices),
+        allow_empty=True,
+        required=False
+    )
+
+class SchoolAddStudentSerializer(serializers.Serializer):
+    """Serializer for adding a student to school"""
+    student_email = serializers.EmailField(required=True)
+    assigned_class = serializers.ChoiceField(choices=Class.ClassName.choices)
+
 
 # =============================================================================
 # SUBJECT & CLASS SERIALIZERS

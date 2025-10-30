@@ -11,6 +11,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from django.core.mail import send_mail
 import random
+import logging
 
 from rest_framework import viewsets, status, permissions, filters
 from rest_framework.decorators import action, api_view, permission_classes
@@ -31,7 +32,7 @@ from .models import (
     ProjectParticipant
 )
 from .serializers import (
-    UserRegistrationSerializer, UserSerializer, UserUpdateSerializer,
+    SchoolAddStudentSerializer, SchoolAddTeacherSerializer, UserRegistrationSerializer, UserSerializer, UserUpdateSerializer,
     PasswordChangeSerializer, SchoolSerializer, SchoolCreateSerializer,
     SchoolMembershipSerializer, SubjectSerializer, ClassSerializer,
     TeacherProfileSerializer, StudentProfileSerializer, ProjectSerializer,
@@ -52,6 +53,8 @@ from .filters import ProjectFilter, SchoolFilter, EnvironmentalImpactFilter
 from rest_framework.permissions import AllowAny
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
+
+logger = logging.getLogger("__name__")
 
 
 # =============================================================================
@@ -1107,6 +1110,168 @@ def add_user_to_school(request, school_id):
     except Exception as e:
         logger.error(f"Error adding user to school: {str(e)}")
         return Response({'error': f'Failed to add user to school: {str(e)}'}, 
+                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([CanManageSchoolMembers])
+def add_student_to_school(request, school_id):
+    """
+    Add a student to a school.
+    Only school admins and teachers can add students to their schools.
+    """
+    try:
+        school = get_object_or_404(School, id=school_id)
+        
+        # Check permission
+        if (school.admin != request.user or request.user.role != "teacher") and not request.user.is_staff:
+            return Response({'error': 'Only school admins and teachers can add students to schools'}, 
+                           status=status.HTTP_403_FORBIDDEN)
+        
+        serializer_class = SchoolAddStudentSerializer(data=request.data)
+        if not serializer_class.is_valid():
+            return Response(serializer_class.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = serializer_class.validated_data
+        student_email = data['student_email']
+        assigned_class_name = data['assigned_class']
+        
+        try:
+            user = User.objects.get(email=student_email)
+            if user.role and user.role != "student":
+                return Response({'error': 'User already has a role other than student.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+            elif not user.role:
+                user.role = "student"
+                user.save()
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'},
+                           status=status.HTTP_404_NOT_FOUND)
+        
+        # Create school membership
+        membership, created = SchoolMembership.objects.get_or_create(
+            user=user,
+            school=school,
+            defaults={'is_active': True}
+        )
+        
+        if not created and membership.is_active:
+            return Response({'error': 'User is already a member of this school'}, 
+                           status=status.HTTP_400_BAD_REQUEST)
+        elif not created:
+            membership.is_active = True
+            membership.save()
+        
+        try:
+            assigned_class = Class.objects.get(name=assigned_class_name, school=school)
+        except Class.DoesNotExist:
+            return Response({'error': 'Class not found in this school'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create appropriate profile
+        StudentProfile.objects.get_or_create(
+            user=user,
+            school=school,
+            defaults={
+            'student_id': f"{school.name[:3].upper()}{user.id}",
+            'current_class': assigned_class
+            }
+        )
+        
+        return Response({
+            'message': f'Successfully added {user.get_full_name()} as {user.role} to {school.name}',
+            'user_id': str(user.id),
+            'user_name': user.get_full_name(),
+            'user_role': user.role,
+            'school_name': school.name
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error adding student to school: {str(e)}")
+        return Response({'error': f'Failed to add student to school: {str(e)}'}, 
+                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([CanManageSchoolMembers])
+def add_teacher_to_school(request, school_id):
+    """
+    Add a teacher to a school.
+    Only school admins can add teachers to their schools.
+    """
+    try:
+        school = get_object_or_404(School, id=school_id)
+        
+        # Check permission
+        if school.admin != request.user and not request.user.is_staff:
+            return Response({'error': 'Only school admins can add teachers to schools'}, 
+                           status=status.HTTP_403_FORBIDDEN)
+        
+        serializer_class = SchoolAddTeacherSerializer(data=request.data)
+        if not serializer_class.is_valid():
+            return Response(serializer_class.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = serializer_class.validated_data
+        teacher_email = data['teacher_email']
+        teacher_role = data['teacher_role']
+        assigned_class_names = data.get('assigned_classes')
+        
+        try:
+            user = User.objects.get(email=teacher_email)
+            if user.role and user.role != "teacher":
+                return Response({'error': 'User already has a role other than teacher.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+            elif not user.role:
+                user.role = "teacher"
+                user.save()
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'},
+                           status=status.HTTP_404_NOT_FOUND)
+        
+        # Create school membership
+        membership, created = SchoolMembership.objects.get_or_create(
+            user=user,
+            school=school,
+            defaults={'is_active': True}
+        )
+        
+        if not created and membership.is_active:
+            return Response({'error': 'User is already a member of this school'}, 
+                           status=status.HTTP_400_BAD_REQUEST)
+        elif not created:
+            membership.is_active = True
+            membership.save()
+        
+        # Create appropriate profile
+        teacher_profile, _ = TeacherProfile.objects.get_or_create(
+            user=user,
+            school=school,
+            defaults={'teacher_role': teacher_role, 'status': 'active'}
+        )
+        # Query classes matching names and this school
+        valid_class_names = Class.objects.filter(name__in=assigned_class_names, school=school).values_list('name', flat=True)
+
+        # Find invalid class names
+        invalid_classes = set(assigned_class_names) - set(valid_class_names)
+        if invalid_classes:
+            return Response(
+                {'error': f'The following classes are invalid or do not belong to the school: {", ".join(invalid_classes)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        valid_classes_qs = Class.objects.filter(name__in=assigned_class_names, school=school)
+        teacher_profile.assigned_classes.set(valid_classes_qs)
+        
+        return Response({
+            'message': f'Successfully added {user.get_full_name()} as {user.role} to {school.name}',
+            'user_id': str(user.id),
+            'user_name': user.get_full_name(),
+            'user_role': teacher_role,
+            'school_name': school.name
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error adding teacher to school: {str(e)}")
+        return Response({'error': f'Failed to add teacher to school: {str(e)}'}, 
                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
