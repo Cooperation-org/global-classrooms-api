@@ -88,6 +88,8 @@ urlpatterns = [
     path('schools/<uuid:pk>/members/', views.get_school_members, name='school-members'),
     path('schools/<uuid:pk>/projects/', views.get_school_projects, name='school-projects'),
     path('schools/<uuid:school_id>/add-user/', views.add_user_to_school, name='add-user-to-school'),
+    path('schools/<uuid:school_id>/add-teacher-school/', views.add_teacher_to_school, name='add-teacher-to-school'),
+    path('schools/<uuid:school_id>/add-student-school/', views.add_student_to_school, name='add-student-to-school'),
     path('classes/<uuid:class_id>/add-student/', views.add_student_to_class, name='add-student-to-class'),
     
     # =================================================================
