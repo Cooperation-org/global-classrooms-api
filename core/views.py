@@ -170,12 +170,29 @@ class WalletLoginView(APIView):
         })
 
 class GoogleLoginView(APIView):
-    """Login using Google account ID"""
+    """Login using Google OAuth token verification"""
     permission_classes = [permissions.AllowAny]
     def post(self, request):
-        google_account_id = request.data.get('google_account_id')
-        if not google_account_id:
-            return Response({'error': 'google_account_id is required'}, status=400)
+        import requests as http_requests
+
+        id_token = request.data.get('id_token')
+        if not id_token:
+            return Response({'error': 'id_token is required'}, status=400)
+
+        # Verify token with Google
+        try:
+            response = http_requests.get(
+                f'https://oauth2.googleapis.com/tokeninfo?id_token={id_token}'
+            )
+            if response.status_code != 200:
+                return Response({'error': 'Invalid Google token'}, status=401)
+            token_data = response.json()
+            google_account_id = token_data.get('sub')
+            if not google_account_id:
+                return Response({'error': 'Invalid token data'}, status=401)
+        except Exception:
+            return Response({'error': 'Failed to verify Google token'}, status=400)
+
         try:
             user = User.objects.get(google_account_id=google_account_id)
         except User.DoesNotExist:
