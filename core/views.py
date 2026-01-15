@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from django.core.mail import send_mail
-import random
+import secrets
 import logging
 
 from rest_framework import viewsets, status, permissions, filters
@@ -177,7 +177,7 @@ class EmailLoginRequestView(APIView):
         email = request.data.get('email')
         if not email:
             return Response({'error': 'Email is required'}, status=400)
-        code = str(random.randint(100000, 999999))
+        code = str(100000 + secrets.randbelow(900000))
         EmailLoginOTP.objects.create(email=email, code=code)
         send_mail(
             'Your Global Classrooms Login Code',
