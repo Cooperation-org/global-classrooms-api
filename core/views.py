@@ -128,14 +128,34 @@ class WalletRegistrationView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 class WalletLoginView(APIView):
-    """Login using wallet address"""
+    """Login using wallet address with signature verification"""
     permission_classes = [permissions.AllowAny]
     def post(self, request):
+        from eth_account.messages import encode_defunct
+        from eth_account import Account
+
         wallet_address = request.data.get('wallet_address')
+        signature = request.data.get('signature')
+        message = request.data.get('message')
+
         if not wallet_address:
             return Response({'error': 'wallet_address is required'}, status=400)
+        if not signature:
+            return Response({'error': 'signature is required'}, status=400)
+        if not message:
+            return Response({'error': 'message is required'}, status=400)
+
+        # Verify the signature
         try:
-            user = User.objects.get(wallet_address=wallet_address)
+            message_hash = encode_defunct(text=message)
+            recovered_address = Account.recover_message(message_hash, signature=signature)
+            if recovered_address.lower() != wallet_address.lower():
+                return Response({'error': 'Invalid signature'}, status=401)
+        except Exception:
+            return Response({'error': 'Invalid signature format'}, status=400)
+
+        try:
+            user = User.objects.get(wallet_address__iexact=wallet_address)
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=404)
         if not user.is_active:
