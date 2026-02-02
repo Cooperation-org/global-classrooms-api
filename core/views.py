@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from django.core.mail import send_mail
-import random
+import secrets
 import logging
 
 from rest_framework import viewsets, status, permissions, filters
@@ -128,14 +128,34 @@ class WalletRegistrationView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 class WalletLoginView(APIView):
-    """Login using wallet address"""
+    """Login using wallet address with signature verification"""
     permission_classes = [permissions.AllowAny]
     def post(self, request):
+        from eth_account.messages import encode_defunct
+        from eth_account import Account
+
         wallet_address = request.data.get('wallet_address')
+        signature = request.data.get('signature')
+        message = request.data.get('message')
+
         if not wallet_address:
             return Response({'error': 'wallet_address is required'}, status=400)
+        if not signature:
+            return Response({'error': 'signature is required'}, status=400)
+        if not message:
+            return Response({'error': 'message is required'}, status=400)
+
+        # Verify the signature
         try:
-            user = User.objects.get(wallet_address=wallet_address)
+            message_hash = encode_defunct(text=message)
+            recovered_address = Account.recover_message(message_hash, signature=signature)
+            if recovered_address.lower() != wallet_address.lower():
+                return Response({'error': 'Invalid signature'}, status=401)
+        except Exception:
+            return Response({'error': 'Invalid signature format'}, status=400)
+
+        try:
+            user = User.objects.get(wallet_address__iexact=wallet_address)
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=404)
         if not user.is_active:
@@ -150,12 +170,29 @@ class WalletLoginView(APIView):
         })
 
 class GoogleLoginView(APIView):
-    """Login using Google account ID"""
+    """Login using Google OAuth token verification"""
     permission_classes = [permissions.AllowAny]
     def post(self, request):
-        google_account_id = request.data.get('google_account_id')
-        if not google_account_id:
-            return Response({'error': 'google_account_id is required'}, status=400)
+        import requests as http_requests
+
+        id_token = request.data.get('id_token')
+        if not id_token:
+            return Response({'error': 'id_token is required'}, status=400)
+
+        # Verify token with Google
+        try:
+            response = http_requests.get(
+                f'https://oauth2.googleapis.com/tokeninfo?id_token={id_token}'
+            )
+            if response.status_code != 200:
+                return Response({'error': 'Invalid Google token'}, status=401)
+            token_data = response.json()
+            google_account_id = token_data.get('sub')
+            if not google_account_id:
+                return Response({'error': 'Invalid token data'}, status=401)
+        except Exception:
+            return Response({'error': 'Failed to verify Google token'}, status=400)
+
         try:
             user = User.objects.get(google_account_id=google_account_id)
         except User.DoesNotExist:
@@ -177,7 +214,7 @@ class EmailLoginRequestView(APIView):
         email = request.data.get('email')
         if not email:
             return Response({'error': 'Email is required'}, status=400)
-        code = str(random.randint(100000, 999999))
+        code = str(100000 + secrets.randbelow(900000))
         EmailLoginOTP.objects.create(email=email, code=code)
         send_mail(
             'Your Global Classrooms Login Code',
