@@ -198,6 +198,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3001",
+    "https://egr-education.xyz",
 ]
 
 
@@ -219,7 +220,9 @@ CORS_ALLOWED_HEADERS = [
 ]
 
 
-CSRF_TRUSTED_ORIGINS = []
+CSRF_TRUSTED_ORIGINS = [
+    "https://egr-education.xyz",
+]
 
 railway_url = config('RAILWAY_URL', default=None)
 if railway_url:
