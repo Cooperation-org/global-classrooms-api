@@ -95,30 +95,43 @@ class UserRegistrationView(CreateAPIView):
 class WalletRegistrationView(APIView):
     """Register with just wallet address"""
     permission_classes = [permissions.AllowAny]
-    
+
     def post(self, request):
         wallet_address = request.data.get('wallet_address')
-        
+
         if not wallet_address:
-            return Response({'error': 'wallet_address is required'}, status=400)
-        
+            return Response({'error': 'wallet_address is required'}, status=status.HTTP_400_BAD_REQUEST)
+
         # Check if wallet already exists
         if User.objects.filter(wallet_address=wallet_address).exists():
-            return Response({'error': 'Wallet already registered'}, status=400)
-        
-        # Create user with wallet only
-        user = User.objects.create(
-            wallet_address=wallet_address,
-            signup_method='wallet',
-            role=request.data.get('role', 'student'),
-            first_name=request.data.get('first_name', ''),
-            last_name=request.data.get('last_name', ''),
-            country=request.data.get('country', '')
-        )
-        
+            return Response({'error': 'Wallet already registered'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate role if provided
+        role = request.data.get('role', 'student')
+        valid_roles = [choice[0] for choice in User.USER_ROLES]
+        if role and role not in valid_roles:
+            return Response({'error': f'Invalid role. Must be one of: {", ".join(valid_roles)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Create user with wallet only - use create_user and set_unusable_password
+            user = User(
+                wallet_address=wallet_address,
+                username=wallet_address,
+                signup_method='wallet',
+                role=role,
+                first_name=request.data.get('first_name', ''),
+                last_name=request.data.get('last_name', ''),
+                country=request.data.get('country', ''),
+            )
+            user.set_unusable_password()
+            user.save()
+        except Exception as e:
+            logger.error(f"Wallet registration failed: {e}", exc_info=True)
+            return Response({'error': 'Registration failed. Please try again.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         # Generate tokens
         refresh = RefreshToken.for_user(user)
-        
+
         return Response({
             'user': UserSerializer(user).data,
             'tokens': {
