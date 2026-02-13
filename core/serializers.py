@@ -63,19 +63,19 @@ class UserSerializer(serializers.ModelSerializer):
     """Serializer for user details"""
     full_name = serializers.SerializerMethodField()
     school_count = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name', 'full_name',
             'role', 'mobile_number', 'gender', 'date_of_birth', 'profile_picture',
-            'city', 'country', 'is_active', 'date_joined', 'school_count', 'signup_method'
+            'city', 'country', 'is_active_user', 'date_joined', 'school_count', 'signup_method'
         ]
         read_only_fields = ['id', 'date_joined', 'full_name', 'school_count']
-    
+
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip()
-    
+
     def get_school_count(self, obj):
         return obj.school_memberships.filter(is_active=True).count()
 
