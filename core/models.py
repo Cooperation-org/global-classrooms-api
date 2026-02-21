@@ -86,6 +86,16 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.role})"
+    
+
+class WalletNonce(models.Model):
+    wallet_address = models.CharField(max_length=255, unique=True)
+    nonce = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.wallet_address} - {self.nonce}"
 
 
 class EmailLoginOTP(models.Model):
