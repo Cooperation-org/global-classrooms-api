@@ -47,6 +47,7 @@ urlpatterns = [
     path('auth/verify/', TokenVerifyView.as_view(), name='token-verify'),
     path('auth/logout/', TokenBlacklistView.as_view(), name='token-blacklist'),
     path('auth/wallet-register/', views.WalletRegistrationView.as_view(), name='wallet-register'),
+    path('auth/wallet/nonce/', views.WalletNonceView.as_view(), name='wallet-nonce'),
     path('auth/login/wallet/', views.WalletLoginView.as_view(), name='wallet-login'),
     path('auth/login/google/', views.GoogleLoginView.as_view(), name='google-login'),
     path('auth/login/email/', views.EmailLoginRequestView.as_view(), name='email-login-request'),

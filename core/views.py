@@ -26,10 +26,12 @@ from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 
+from .utils import verify_wallet_signature
+
 from .models import (
     User, School, Subject, Class, TeacherProfile, StudentProfile,
     Project, ProjectParticipation, EnvironmentalImpact, Donation,
-    Certificate, SchoolMembership, EmailLoginOTP, ProjectGoal, ProjectFile, ProjectUpdate,
+    Certificate, SchoolMembership, WalletNonce, EmailLoginOTP, ProjectGoal, ProjectFile, ProjectUpdate,
     ProjectParticipant
 )
 from .serializers import (
@@ -91,20 +93,57 @@ class UserRegistrationView(CreateAPIView):
         }, status=status.HTTP_201_CREATED)
 
 
-
-class WalletRegistrationView(APIView):
-    """Register with just wallet address"""
+class WalletNonceView(APIView):
+    """Generate nonce for a wallet session (registration or login)"""
+    authentication_classes = []
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         wallet_address = request.data.get('wallet_address')
+        if not wallet_address:
+            return Response({'error': 'wallet_address is required'}, status=400)
+        
+        wallet_address = wallet_address.lower()
+
+        nonce = secrets.token_urlsafe(16)
+        wallet_nonce, _ = WalletNonce.objects.update_or_create(
+            wallet_address=wallet_address,
+            defaults={
+                'nonce': nonce,
+                'updated_at': timezone.now()
+            },
+        )
+
+        return Response({'nonce': wallet_nonce.nonce}, status=200)
+
+
+class WalletRegistrationView(APIView):
+    """Register with just wallet address"""
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        wallet_address = request.data.get('wallet_address')
+        signature = request.data.get('signature')
+        message = request.data.get('message')
 
         if not wallet_address:
             return Response({'error': 'wallet_address is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not signature:
+            return Response({'error': 'signature is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not message:
+            return Response({'error': 'message is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        wallet_address = wallet_address.lower()
 
         # Check if wallet already exists
         if User.objects.filter(wallet_address=wallet_address).exists():
             return Response({'error': 'Wallet already registered'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Verify nonce + signature
+        ok, error_response = verify_wallet_signature(wallet_address, message, signature, purpose="Register")
+        if not ok:
+            return error_response
 
         # Validate role if provided
         role = request.data.get('role', 'student')
@@ -142,10 +181,9 @@ class WalletRegistrationView(APIView):
 
 class WalletLoginView(APIView):
     """Login using wallet address with signature verification"""
+    authentication_classes = []
     permission_classes = [permissions.AllowAny]
     def post(self, request):
-        from eth_account.messages import encode_defunct
-        from eth_account import Account
 
         wallet_address = request.data.get('wallet_address')
         signature = request.data.get('signature')
@@ -157,22 +195,19 @@ class WalletLoginView(APIView):
             return Response({'error': 'signature is required'}, status=400)
         if not message:
             return Response({'error': 'message is required'}, status=400)
-
-        # Verify the signature
-        try:
-            message_hash = encode_defunct(text=message)
-            recovered_address = Account.recover_message(message_hash, signature=signature)
-            if recovered_address.lower() != wallet_address.lower():
-                return Response({'error': 'Invalid signature'}, status=401)
-        except Exception:
-            return Response({'error': 'Invalid signature format'}, status=400)
-
+        
         try:
             user = User.objects.get(wallet_address__iexact=wallet_address)
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=404)
         if not user.is_active:
             return Response({'error': 'User is inactive'}, status=403)
+        
+        # Verify nonce + signature
+        ok, error_response = verify_wallet_signature(wallet_address, message, signature, purpose="Login")
+        if not ok:
+            return error_response
+
         refresh = RefreshToken.for_user(user)
         return Response({
             'user': UserSerializer(user).data,

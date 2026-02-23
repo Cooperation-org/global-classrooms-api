@@ -29,6 +29,11 @@ from rest_framework.pagination import PageNumberPagination
 from PIL import Image
 import io
 
+from eth_account.messages import encode_defunct
+from eth_account import Account
+
+from .models import WalletNonce
+
 logger = logging.getLogger(__name__)
 
 
@@ -396,6 +401,50 @@ def validate_impact_value(impact_type, value):
         errors.append(f"Value seems unreasonably high for {impact_type}")
     
     return errors
+
+
+def verify_wallet_signature(wallet_address: str, message: str, signature: str, purpose: str):
+    """
+    Verify the `message`:
+      - Matches the expected format with the current nonce for wallet_address
+      - Has a valid Ethereum signature from wallet_address
+
+    `purpose` is a string ("Login" or "Register") to distinguish message formats.
+    """
+
+    wallet_address = wallet_address.lower()
+
+    # 1) Load nonce record
+    try:
+        nonce_obj = WalletNonce.objects.get(wallet_address=wallet_address)
+    except WalletNonce.DoesNotExist:
+        return False, Response({'error': 'Nonce not found for wallet'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 2) Check expiry
+    if nonce_obj.created_at < timezone.now() - timedelta(minutes=10):
+        return False, Response({'error': 'Nonce expired'}, status=status.HTTP_400_BAD_REQUEST)
+
+    expected_nonce = nonce_obj.nonce
+
+    # 3) Build expected message
+    expected_message = f"{purpose} to Global Classrooms with this wallet\n\nNonce: {expected_nonce}"
+
+    if message != expected_message:
+        return False, Response({'error': 'Invalid nonce or message'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 4) Verify signature
+    try:
+        msg_hash = encode_defunct(text=message)
+        recovered = Account.recover_message(msg_hash, signature=signature)
+        if recovered.lower() != wallet_address:
+            return False, Response({'error': 'Invalid signature'}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception:
+        return False, Response({'error': 'Invalid signature format'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 5) Invalidate nonce (one-time use)
+    nonce_obj.delete()
+
+    return True, None
 
 
 # =============================================================================
